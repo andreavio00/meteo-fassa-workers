@@ -1,0 +1,9 @@
+{
+  "name": "meteopozza-amatoriali",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check meteopozza-amatoriali.js",
+    "test": "node --test test/*.test.js"
+  }
+}
