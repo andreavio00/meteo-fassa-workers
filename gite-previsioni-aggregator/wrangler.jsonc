@@ -1,5 +1,15 @@
 {
   "name": "gite-previsioni-aggregator",
   "main": "gite-previsioni-aggregator.js",
-  "compatibility_date": "2026-09-12"
+  "compatibility_date": "2026-09-12",
+  "services": [
+    {
+      "binding": "METEOREPORT",
+      "service": "gite-previsioni-meteoreport"
+    },
+    {
+      "binding": "OPENMETEO",
+      "service": "gite-previsioni-open-meteo"
+    }
+  ]
 }
