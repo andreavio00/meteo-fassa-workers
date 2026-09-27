@@ -1,0 +1,9 @@
+{
+  "name": "meteomoena-previsioni",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check meteomoena-previsioni.js",
+    "test": "node --test test/*.test.js"
+  }
+}

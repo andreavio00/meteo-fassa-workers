@@ -1,0 +1,8 @@
+{
+  "name": "meteomoena-amatoriali",
+  "main": "meteomoena-amatoriali.js",
+  "compatibility_date": "2026-09-27",
+  "observability": {
+    "enabled": true
+  }
+}

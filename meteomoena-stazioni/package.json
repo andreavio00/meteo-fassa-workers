@@ -1,0 +1,9 @@
+{
+  "name": "meteomoena-stazioni",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check meteomoena-stazioni.js",
+    "test": "node --test test/*.test.js"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "meteomoena-stazioni",
+  "main": "meteomoena-stazioni.js",
+  "compatibility_date": "2026-09-27",
+  "observability": {
+    "enabled": true
+  },
+  "services": [
+    {
+      "binding": "TRENTINO",
+      "service": "gite-meteotrentino"
+    },
+    {
+      "binding": "POZZA",
+      "service": "meteopozza-stazioni"
+    }
+  ]
+}

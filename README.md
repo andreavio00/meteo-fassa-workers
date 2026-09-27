@@ -10,6 +10,21 @@ al momento caricati  worker per:
 * gite-previsioni-aggregator
 * meteo-fassa-previsioni-richiesta
 * meteopozza-amatoriali
+* meteomoena-stazioni
+* meteomoena-amatoriali
+* meteomoena-previsioni
+
+## Worker di Moena
+
+La futura pagina MoenaLive riutilizza i Worker delle escursioni e delle
+previsioni su richiesta. I servizi specifici sono:
+
+* `meteomoena-stazioni`: Diga di Pezzè T0096, Moena Meteo e Vigo di Fassa;
+* `meteomoena-amatoriali`: tre Weather Underground e tre Netatmo;
+* `meteomoena-previsioni`: previsione fissa Meteo.report di Moena.
+
+Il contratto comune delle stazioni e' descritto in
+[`docs/moena-stations-contract.md`](docs/moena-stations-contract.md).
 
 ## Stazioni MeteoTrentino per le escursioni
 
