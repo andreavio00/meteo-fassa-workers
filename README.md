@@ -19,7 +19,7 @@ al momento caricati  worker per:
 La futura pagina MoenaLive riutilizza i Worker delle escursioni e delle
 previsioni su richiesta. I servizi specifici sono:
 
-* `meteomoena-stazioni`: Diga di Pezzè T0096, Moena Meteo e Vigo di Fassa;
+* `meteomoena-stazioni`: Diga di Pezzè T0096,   Moena Meteo e Vigo di Fassa;
 * `meteomoena-amatoriali`: tre Weather Underground e tre Netatmo;
 * `meteomoena-previsioni`: previsione fissa Meteo.report di Moena.
 
