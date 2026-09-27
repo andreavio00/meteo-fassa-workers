@@ -30,6 +30,65 @@ function wundergroundHtml(id) {
   `;
 }
 
+function wundergroundAppHtml(id) {
+  const state = {
+    observations: {
+      b: {
+        observations: [{
+          stationID: id,
+          obsTimeUtc: new Date(nowEpoch * 1000).toISOString(),
+          epoch: nowEpoch,
+          lat: 46.377998,
+          lon: 11.657,
+          solarRadiationHigh: 0,
+          uvHigh: 0,
+          winddirAvg: 320,
+          humidityHigh: 75,
+          humidityLow: 73,
+          humidityAvg: 74,
+          imperial: {
+            tempHigh: 59.2,
+            tempLow: 58.8,
+            tempAvg: 59,
+            windspeedHigh: 1,
+            windspeedLow: 0,
+            windspeedAvg: 0.5,
+            windgustHigh: 2,
+            windgustAvg: 1,
+            dewptHigh: 50,
+            dewptLow: 49,
+            dewptAvg: 49.5,
+            windchillHigh: 59,
+            windchillLow: 58,
+            windchillAvg: 58.5,
+            heatindexHigh: 59,
+            heatindexLow: 58,
+            heatindexAvg: 58.5,
+            pressureMax: 30.19,
+            pressureMin: 30.17,
+            precipRate: 0,
+            precipTotal: 0
+          }
+        }]
+      }
+    },
+    summary: {
+      b: {
+        summaries: [{
+          stationID: id,
+          epoch: nowEpoch,
+          imperial: {
+            tempHigh: 76,
+            tempLow: 46,
+            precipTotal: 0
+          }
+        }]
+      }
+    }
+  };
+  return `<script id="app-root-state" type="application/json">${JSON.stringify(state)}</script>`;
+}
+
 function netatmoStation(id, index) {
   const outdoorId = `02:00:00:00:00:0${index + 1}`;
   return {
@@ -72,7 +131,10 @@ function mockFetch(options = {}) {
     if (url.hostname === "www.wunderground.com") {
       const id = url.pathname.split("/").pop();
       if (options.failWu === id) return new Response("errore", { status: 503 });
-      return new Response(wundergroundHtml(id), { status: 200 });
+      return new Response(
+        id === "IMOENA6" ? wundergroundAppHtml(id) : wundergroundHtml(id),
+        { status: 200 }
+      );
     }
     if (url.hostname === "auth.netatmo.com") {
       if (options.failNetatmo) return new Response("errore", { status: 503 });
@@ -121,6 +183,13 @@ test("contratto delle stazioni amatoriali di Moena", async t => {
     assert.equal(ischiacia.temperature, 11);
     assert.equal(ischiacia.humidity, 70);
     assert.equal(ischiacia.pressure, 1020);
+
+    const wolf = body.stations[3];
+    assert.equal(wolf.temperature, 15);
+    assert.equal(wolf.temperatureMin, 7.8);
+    assert.equal(wolf.temperatureMax, 24.4);
+    assert.equal(wolf.altitude, 1190);
+    assert.match(wolf.warnings[0], /5 minuti/i);
   });
 
   await t.test("il guasto di una PWS non blocca le altre cinque", async () => {

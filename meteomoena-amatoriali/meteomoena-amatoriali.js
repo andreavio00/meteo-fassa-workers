@@ -47,7 +47,8 @@ const STATION_DEFINITIONS = [
     source: "Weather Underground",
     sourceName: "Weather Underground - IMOENA8",
     sourceUrl: "https://www.wunderground.com/dashboard/pws/IMOENA8",
-    provider: "wunderground"
+    provider: "wunderground",
+    fallbackAltitude: 1210
   },
   {
     id: "moena-villa-iellici",
@@ -58,7 +59,8 @@ const STATION_DEFINITIONS = [
     source: "Weather Underground",
     sourceName: "Weather Underground - IMOENA7",
     sourceUrl: "https://www.wunderground.com/dashboard/pws/IMOENA7",
-    provider: "wunderground"
+    provider: "wunderground",
+    fallbackAltitude: 1207
   },
   {
     id: "moena-ischiacia",
@@ -80,7 +82,8 @@ const STATION_DEFINITIONS = [
     source: "Weather Underground",
     sourceName: "Weather Underground - IMOENA6",
     sourceUrl: "https://www.wunderground.com/dashboard/pws/IMOENA6",
-    provider: "wunderground"
+    provider: "wunderground",
+    fallbackAltitude: 1190
   },
   {
     id: "moena-lowy",
@@ -201,7 +204,7 @@ function emptyModules() {
 }
 
 function publicDefinition(definition) {
-  const { provider, ...publicFields } = definition;
+  const { provider, fallbackAltitude, ...publicFields } = definition;
   return publicFields;
 }
 
@@ -332,6 +335,120 @@ function inchesMercuryToHpa(value) {
   return number === null ? null : round(number * 33.8638866667);
 }
 
+function average(first, second) {
+  const values = [numeric(first), numeric(second)]
+    .filter(value => value !== null);
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/*
+ * Weather Underground sta distribuendo due versioni del dashboard:
+ *
+ * - la pagina storica, con i custom element temp-widget-view ecc.;
+ * - la nuova applicazione Angular, che incorpora nel tag app-root-state le
+ *   osservazioni a cinque minuti e il riepilogo giornaliero.
+ *
+ * La seconda forma e' gia' attiva almeno per IMOENA6. La leggiamo come
+ * fallback, senza usare nel codice una API key estratta dalla pagina.
+ */
+function parseWundergroundAppState(definition, html) {
+  const stateMatch = html.match(
+    /<script[^>]*id=["']app-root-state["'][^>]*>([\s\S]*?)<\/script>/i
+  );
+  if (!stateMatch) {
+    throw new Error(`Dati Weather Underground non trovati per ${definition.upstreamId}`);
+  }
+
+  let state;
+  try {
+    state = JSON.parse(stateMatch[1]);
+  } catch {
+    throw new Error(`Stato Weather Underground non valido per ${definition.upstreamId}`);
+  }
+
+  const observations = [];
+  const summaries = [];
+  for (const entry of Object.values(state || {})) {
+    const body = entry?.b || entry?.value || null;
+    if (Array.isArray(body?.observations)) observations.push(...body.observations);
+    if (Array.isArray(body?.summaries)) summaries.push(...body.summaries);
+  }
+
+  const stationId = definition.upstreamId.toUpperCase();
+  const matchingObservations = observations
+    .filter(item => String(item?.stationID || "").toUpperCase() === stationId)
+    .sort((first, second) => numeric(first?.epoch) - numeric(second?.epoch));
+  const matchingSummaries = summaries
+    .filter(item => String(item?.stationID || "").toUpperCase() === stationId)
+    .sort((first, second) => numeric(first?.epoch) - numeric(second?.epoch));
+
+  const observation = matchingObservations.at(-1) || null;
+  const summary = matchingSummaries.at(-1) || null;
+  if (!observation?.imperial) {
+    throw new Error(`Osservazioni Weather Underground non trovate per ${definition.upstreamId}`);
+  }
+
+  const imperial = observation.imperial;
+  const daily = summary?.imperial || {};
+  const temperature = fahrenheitToCelsius(
+    imperial.tempAvg ?? average(imperial.tempHigh, imperial.tempLow)
+  );
+  const humidity = bounded(
+    observation.humidityAvg ?? average(observation.humidityHigh, observation.humidityLow),
+    0,
+    100
+  );
+  const pressureInHg = average(imperial.pressureMax, imperial.pressureMin);
+  const windDirection = bounded(observation.winddirAvg, 0, 360);
+
+  return finalizeStation(definition, {
+    sourceName: definition.sourceName,
+    latitude: bounded(observation.lat, -90, 90),
+    longitude: bounded(observation.lon, -180, 180),
+    altitude: bounded(definition.fallbackAltitude, 0, 5000),
+    coordinatesApproximate: false,
+    temperature,
+    temperatureMin: fahrenheitToCelsius(daily.tempLow),
+    temperatureMax: fahrenheitToCelsius(daily.tempHigh),
+    humidity,
+    dewPoint: fahrenheitToCelsius(
+      imperial.dewptAvg ?? average(imperial.dewptHigh, imperial.dewptLow)
+    ),
+    windChill: fahrenheitToCelsius(
+      imperial.windchillAvg ?? average(imperial.windchillHigh, imperial.windchillLow)
+    ),
+    heatIndex: fahrenheitToCelsius(
+      imperial.heatindexAvg ?? average(imperial.heatindexHigh, imperial.heatindexLow)
+    ),
+    pressure: inchesMercuryToHpa(pressureInHg),
+    wind: milesToKilometres(
+      imperial.windspeedAvg ?? average(imperial.windspeedHigh, imperial.windspeedLow)
+    ),
+    windGust: milesToKilometres(imperial.windgustHigh ?? imperial.windgustAvg),
+    windDirection,
+    windDirectionText: directionFromDegrees(windDirection),
+    rainRate: inchesToMillimetres(imperial.precipRate),
+    rainHour: null,
+    rainToday: inchesToMillimetres(daily.precipTotal ?? imperial.precipTotal),
+    solarRadiation: bounded(observation.solarRadiationHigh, 0, 2000),
+    uvIndex: bounded(observation.uvHigh, 0, 30),
+    updatedAt: observation.obsTimeUtc || observation.epoch,
+    connected: true,
+    modules: {
+      temperature: temperature !== null,
+      humidity: humidity !== null,
+      pressure: pressureInHg !== null,
+      rain: imperial.precipRate !== null || daily.precipTotal !== null,
+      wind: imperial.windspeedAvg !== null || imperial.windspeedHigh !== null,
+      solar: observation.solarRadiationHigh !== null &&
+        observation.solarRadiationHigh !== undefined,
+      uv: observation.uvHigh !== null && observation.uvHigh !== undefined
+    },
+    warnings: ["Dati correnti ricavati dalla serie Weather Underground a 5 minuti."]
+  });
+}
+
 function parseWunderground(definition, html) {
   const statusTag = firstTag(html, "pws-status");
   const temperatureTag = firstTag(html, "temp-widget-view");
@@ -426,7 +543,7 @@ function parseWunderground(definition, html) {
   });
 
   if (station.temperature === null && station.humidity === null && station.pressure === null) {
-    throw new Error(`Dati Weather Underground non trovati per ${definition.upstreamId}`);
+    return parseWundergroundAppState(definition, html);
   }
   return station;
 }
