@@ -155,6 +155,7 @@ export default {
     response.headers.set("X-Content-Type-Options", "nosniff");
     response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     response.headers.set("X-MoenaLive-Proxy", "github-pages");
+    response.headers.set("X-MoenaLive-Version", "2");
 
     if (resolved.mappedPath === "/sw.js") {
       response.headers.set("Service-Worker-Allowed", "/");

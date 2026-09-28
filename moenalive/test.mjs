@@ -23,6 +23,7 @@ try {
     "https://andreavio00.github.io/meteo-fassa/moena.html"
   );
   assert.equal(root.headers.get("X-MoenaLive-Proxy"), "github-pages");
+  assert.equal(root.headers.get("X-MoenaLive-Version"), "2");
   assert.match(await root.text(), /rel="manifest"/);
   assert.doesNotMatch(await (async()=>{
     const response=await worker.fetch(new Request("https://moenalive.example/"));
