@@ -1,6 +1,6 @@
 // ======================================================
 // GITE METEO AGGREGATOR
-// Versione 1.2
+// Versione 1.3
 //
 // Service Bindings richiesti:
 // FASSA    -> gitemeteofassa
@@ -14,9 +14,13 @@
 // ======================================================
 
 
-const SCHEMA_VERSION = "1.2";
+const SCHEMA_VERSION = "1.3";
 const TIMEZONE = "Europe/Rome";
 const CACHE_TTL_SECONDS = 120;
+const UPSTREAM_TIMEOUT_MS = 4500;
+
+const SAN_PELLEGRINO_STATION_URL =
+  "https://www.meteonetwork.eu/it/weather-station/trn362-stazione-meteorologica-di-loc-alochet-sarcine-passo-san-pellegrino";
 
 
 /*
@@ -37,6 +41,8 @@ const STATION_SOURCE_URLS = {
     "https://www.primierometeo.it/passorolle/",
   "fassa:paradiso":
     "https://www.primierometeo.it/paradiso/",
+  "fassa:sarcine":
+    SAN_PELLEGRINO_STATION_URL,
   "fassa:passosella":
     "https://www.dolomitesmeteo.it/passosella/tabella.html",
   "fassa:pizboe":
@@ -106,7 +112,7 @@ const ZONES = [
     id: "moena_latemar",
     name: "Moena e Latemar",
     stationKeys: [
-      "fassa:paradiso",
+      "fassa:sarcine",
       "fassa:rolle",
       "predazzo:torredipisa",
       "predazzo:passofeudo",
@@ -546,6 +552,178 @@ function normalize(station, family) {
 
 
 // ======================================================
+// PASSO SAN PELLEGRINO - METEONETWORK TRN362
+// ======================================================
+
+/*
+  TRN362 si trova in localita' Alochet/Sarcine, nel settore del Passo San
+  Pellegrino. La leggiamo qui in parallelo ai tre Worker sorgente: in questo
+  modo Cima Paradiso (che appartiene al Passo Rolle) non viene piu' usata come
+  riferimento geografico del San Pellegrino.
+
+  La stazione puo' risultare temporaneamente offline. In quel caso manteniamo
+  comunque la sua identita' nella zona, senza trasformare dati vecchi in una
+  falsa osservazione corrente; quando MeteoNetwork torna online il parser
+  riprende automaticamente a esporre i valori.
+*/
+
+function meteoNetworkText(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&deg;|&#176;/gi, "°")
+    .replace(/&minus;|&#8722;/gi, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function matchedNumber(match, index = 1) {
+  return match ? num(match[index]) : null;
+}
+
+
+function meteoNetworkUpdated(html) {
+  const hour = html.match(
+    /let\s+maxTHour\s*=\s*(\d{1,2})\s*-\s*hours/
+  );
+  const minute = html.match(
+    /let\s+maxTMin\s*=\s*(\d{1,2})\s*-\s*parseInt\(minutes\)/
+  );
+  const date = html.match(
+    /'\s*del\s*'\s*\+\s*'(\d{4}-\d{2}-\d{2})'/
+  );
+
+  if (!hour || !minute || !date)
+    return null;
+
+  const hh = String(hour[1]).padStart(2, "0");
+  const mm = String(minute[1]).padStart(2, "0");
+  return `${date[1]}T${hh}:${mm}:00Z`;
+}
+
+
+function parseSanPellegrinoStation(html) {
+  const text = meteoNetworkText(html);
+  const fetchedAt = new Date().toISOString();
+
+  const temperatureValues = text.match(
+    /Temperatura\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
+  );
+
+  const temperature = temperatureValues
+    ? matchedNumber(temperatureValues, 1)
+    : matchedNumber(text.match(
+      /Temperatura\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
+    ));
+
+  const sourceOnline = /class="btn btn-success"[^>]*>\s*online\s*</i.test(html);
+
+  return {
+    id: "sarcine",
+    name: "Sarcine - Passo San Pellegrino",
+    altitude: 1800,
+    latitude: 46.376913,
+    longitude: 11.751399,
+    source: "MeteoNetwork",
+    sourceUrl: SAN_PELLEGRINO_STATION_URL,
+    status: sourceOnline && temperature !== null ? "online" : "offline",
+    updated: meteoNetworkUpdated(html),
+    fetchedAt,
+    temperature,
+    temperatureMax: temperatureValues
+      ? matchedNumber(temperatureValues, 2)
+      : null,
+    temperatureMin: temperatureValues
+      ? matchedNumber(temperatureValues, 3)
+      : null,
+    humidity: matchedNumber(text.match(
+      /Umidit(?:a|à)\s+(\d+(?:[.,]\d+)?)\s*%/i
+    )),
+    pressure: matchedNumber(text.match(
+      /Pressione\s+(\d+(?:[.,]\d+)?)\s*hPa/i
+    )),
+    precipitation: matchedNumber(text.match(
+      /Pioggia\s+(\d+(?:[.,]\d+)?)\s*mm/i
+    )),
+    rainRate: matchedNumber(text.match(
+      /Pioggia\s+\d+(?:[.,]\d+)?\s*mm\s*\(\s*(\d+(?:[.,]\d+)?)\s*mm\/h/i
+    )),
+    wind: matchedNumber(text.match(
+      /Vento\s+(\d+(?:[.,]\d+)?)\s*km\/h/i
+    )),
+    windDirection: text.match(
+      /Vento\s+\d+(?:[.,]\d+)?\s*km\/h\s*\(([^)]+)\)/i
+    )?.[1]?.trim() || null,
+    windGust: matchedNumber(text.match(
+      /Raffica\s+(\d+(?:[.,]\d+)?)\s*km\/h/i
+    )),
+    dewPoint: matchedNumber(text.match(
+      /Temp\.\s*di\s*rugiada\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
+    )),
+    stationCode: "TRN362"
+  };
+}
+
+
+function unavailableSanPellegrinoStation(error) {
+  return {
+    id: "sarcine",
+    name: "Sarcine - Passo San Pellegrino",
+    altitude: 1800,
+    latitude: 46.376913,
+    longitude: 11.751399,
+    source: "MeteoNetwork",
+    sourceUrl: SAN_PELLEGRINO_STATION_URL,
+    status: "error",
+    updated: null,
+    fetchedAt: new Date().toISOString(),
+    stationCode: "TRN362",
+    error: String(error?.message || error || "Fonte non disponibile")
+  };
+}
+
+
+async function fetchSanPellegrinoStation() {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    UPSTREAM_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch(
+      SAN_PELLEGRINO_STATION_URL,
+      {
+        headers: {
+          "Accept": "text/html,application/xhtml+xml",
+          "User-Agent": "Mozilla/5.0 (compatible; MeteoFassaWorker/1.3)"
+        },
+        signal: controller.signal,
+        cf: {
+          cacheEverything: true,
+          cacheTtl: CACHE_TTL_SECONDS
+        }
+      }
+    );
+
+    if (!response.ok)
+      throw new Error(`MeteoNetwork HTTP ${response.status}`);
+
+    return parseSanPellegrinoStation(
+      await response.text()
+    );
+  } catch (error) {
+    return unavailableSanPellegrinoStation(error);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
+// ======================================================
 // LETTURA SERVICE BINDING
 // ======================================================
 
@@ -790,25 +968,43 @@ export default {
     // CARICA LE TRE FAMIGLIE IN PARALLELO
     // ==================================================
 
-    const results =
+    const [results, sanPellegrinoStation] =
       await Promise.all([
 
-        fetchService(
-          "fassa",
-          env.FASSA
-        ),
+        Promise.all([
 
-        fetchService(
-          "trentino",
-          env.TRENTINO
-        ),
+          fetchService(
+            "fassa",
+            env.FASSA
+          ),
 
-        fetchService(
-          "predazzo",
-          env.PREDAZZO
-        )
+          fetchService(
+            "trentino",
+            env.TRENTINO
+          ),
+
+          fetchService(
+            "predazzo",
+            env.PREDAZZO
+          )
+
+        ]),
+
+        fetchSanPellegrinoStation()
 
       ]);
+
+
+    const fassaResult =
+      results.find(result => result.id === "fassa");
+
+    if (
+      fassaResult &&
+      !fassaResult.stations.some(station => station?.id === "sarcine")
+    ) {
+      fassaResult.stations.push(sanPellegrinoStation);
+      fassaResult.count = fassaResult.stations.length;
+    }
 
 
     // ==================================================
