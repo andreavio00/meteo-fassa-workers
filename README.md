@@ -43,10 +43,11 @@ dell'aggregatore delle previsioni:
 * `marmolada_val_s_nicolo`
 * `moena_latemar`
 
-La zona `moena_latemar` riunisce le osservazioni di Sarcine (MeteoNetwork
-`TRN362`, settore del Passo San Pellegrino), Passo Rolle e Latemar. La stazione
-di Cima Paradiso resta disponibile nel dataset generale, ma non viene associata
-al San Pellegrino. L'aggregatore delle previsioni include anche Passo San
+La zona `moena_latemar` riunisce le osservazioni della stazione WeatherCloud
+di Sarcine (`6354731265`, settore del Passo San Pellegrino), Passo Rolle e
+Latemar. I dati di Sarcine vengono considerati correnti soltanto entro 30 minuti
+dall'ultimo aggiornamento. La stazione di Cima Paradiso resta disponibile nel
+dataset generale, ma non viene associata al San Pellegrino. L'aggregatore delle previsioni include anche Passo San
 Pellegrino e il punto ICON-D2 di Fuciade (46.3930724, 11.8277404), oltre ai
 punti già presenti di Costalunga, Rolle e Passo Feudo.
 

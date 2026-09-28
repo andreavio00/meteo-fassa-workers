@@ -1,6 +1,6 @@
 // ======================================================
 // GITE METEO AGGREGATOR
-// Versione 1.3
+// Versione 1.4
 //
 // Service Bindings richiesti:
 // FASSA    -> gitemeteofassa
@@ -14,13 +14,17 @@
 // ======================================================
 
 
-const SCHEMA_VERSION = "1.3";
+const SCHEMA_VERSION = "1.4";
 const TIMEZONE = "Europe/Rome";
 const CACHE_TTL_SECONDS = 120;
-const UPSTREAM_TIMEOUT_MS = 4500;
+const UPSTREAM_TIMEOUT_MS = 15_000;
+const STALE_AFTER_SECONDS = 30 * 60;
 
+const SAN_PELLEGRINO_WEATHERCLOUD_ID = "6354731265";
 const SAN_PELLEGRINO_STATION_URL =
-  "https://www.meteonetwork.eu/it/weather-station/trn362-stazione-meteorologica-di-loc-alochet-sarcine-passo-san-pellegrino";
+  `https://app.weathercloud.net/d${SAN_PELLEGRINO_WEATHERCLOUD_ID}`;
+const SAN_PELLEGRINO_VALUES_URL =
+  `https://app.weathercloud.net/device/values/${SAN_PELLEGRINO_WEATHERCLOUD_ID}`;
 
 
 /*
@@ -552,118 +556,93 @@ function normalize(station, family) {
 
 
 // ======================================================
-// PASSO SAN PELLEGRINO - METEONETWORK TRN362
+// PASSO SAN PELLEGRINO - WEATHERCLOUD SARCINE
 // ======================================================
 
 /*
-  TRN362 si trova in localita' Alochet/Sarcine, nel settore del Passo San
-  Pellegrino. La leggiamo qui in parallelo ai tre Worker sorgente: in questo
-  modo Cima Paradiso (che appartiene al Passo Rolle) non viene piu' usata come
-  riferimento geografico del San Pellegrino.
+  La stazione WeatherCloud di Sarcine si trova nel settore del Passo San
+  Pellegrino e trasmette temperatura, umidita', vento, pressione e pioggia.
+  La leggiamo in parallelo ai tre Worker sorgente: in questo modo Cima
+  Paradiso (che appartiene al Passo Rolle) non viene usata come riferimento
+  geografico del San Pellegrino.
 
-  La stazione puo' risultare temporaneamente offline. In quel caso manteniamo
-  comunque la sua identita' nella zona, senza trasformare dati vecchi in una
-  falsa osservazione corrente; quando MeteoNetwork torna online il parser
-  riprende automaticamente a esporre i valori.
+  L'epoch della fonte viene sempre controllato: oltre 30 minuti i valori sono
+  marcati come "stale" e il frontend non li presenta come osservazioni
+  correnti. Non combiniamo i dati con quelli di altre stazioni vicine.
 */
 
-function meteoNetworkText(html) {
-  return String(html || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&deg;|&#176;/gi, "°")
-    .replace(/&minus;|&#8722;/gi, "-")
-    .replace(/\s+/g, " ")
-    .trim();
+function weatherCloudWindKmh(value) {
+  const speed = num(value);
+  return speed === null
+    ? null
+    : Math.round(speed * 36) / 10;
 }
 
 
-function matchedNumber(match, index = 1) {
-  return match ? num(match[index]) : null;
-}
+function weatherCloudUpdated(epoch) {
+  const seconds = num(epoch);
 
-
-function meteoNetworkUpdated(html) {
-  const hour = html.match(
-    /let\s+maxTHour\s*=\s*(\d{1,2})\s*-\s*hours/
-  );
-  const minute = html.match(
-    /let\s+maxTMin\s*=\s*(\d{1,2})\s*-\s*parseInt\(minutes\)/
-  );
-  const date = html.match(
-    /'\s*del\s*'\s*\+\s*'(\d{4}-\d{2}-\d{2})'/
-  );
-
-  if (!hour || !minute || !date)
+  if (seconds === null || seconds <= 0)
     return null;
 
-  const hh = String(hour[1]).padStart(2, "0");
-  const mm = String(minute[1]).padStart(2, "0");
-  return `${date[1]}T${hh}:${mm}:00Z`;
+  const milliseconds = seconds > 1_000_000_000_000
+    ? seconds
+    : seconds * 1000;
+  const date = new Date(milliseconds);
+
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.toISOString();
 }
 
 
-function parseSanPellegrinoStation(html) {
-  const text = meteoNetworkText(html);
+function parseSanPellegrinoStation(values) {
   const fetchedAt = new Date().toISOString();
+  const updated = weatherCloudUpdated(values?.epoch);
+  const updatedTime = updated ? Date.parse(updated) : null;
+  const ageSeconds = updatedTime === null
+    ? null
+    : Math.max(0, Math.round((Date.now() - updatedTime) / 1000));
+  const temperature = num(values?.temp);
+  const humidity = num(values?.hum);
+  const pressure = num(values?.bar);
+  const hasCoreData =
+    temperature !== null ||
+    humidity !== null ||
+    pressure !== null;
 
-  const temperatureValues = text.match(
-    /Temperatura\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
-  );
-
-  const temperature = temperatureValues
-    ? matchedNumber(temperatureValues, 1)
-    : matchedNumber(text.match(
-      /Temperatura\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
-    ));
-
-  const sourceOnline = /class="btn btn-success"[^>]*>\s*online\s*</i.test(html);
+  let status = "offline";
+  if (hasCoreData && ageSeconds !== null) {
+    status = ageSeconds <= STALE_AFTER_SECONDS
+      ? "online"
+      : "stale";
+  }
 
   return {
     id: "sarcine",
-    name: "Sarcine - Passo San Pellegrino",
+    name: "Sarcine · Passo San Pellegrino",
     altitude: 1800,
-    latitude: 46.376913,
-    longitude: 11.751399,
-    source: "MeteoNetwork",
+    latitude: 46.3758124,
+    longitude: 11.7500821,
+    source: "WeatherCloud",
     sourceUrl: SAN_PELLEGRINO_STATION_URL,
-    status: sourceOnline && temperature !== null ? "online" : "offline",
-    updated: meteoNetworkUpdated(html),
+    status,
+    updated,
     fetchedAt,
     temperature,
-    temperatureMax: temperatureValues
-      ? matchedNumber(temperatureValues, 2)
-      : null,
-    temperatureMin: temperatureValues
-      ? matchedNumber(temperatureValues, 3)
-      : null,
-    humidity: matchedNumber(text.match(
-      /Umidit(?:a|à)\s+(\d+(?:[.,]\d+)?)\s*%/i
-    )),
-    pressure: matchedNumber(text.match(
-      /Pressione\s+(\d+(?:[.,]\d+)?)\s*hPa/i
-    )),
-    precipitation: matchedNumber(text.match(
-      /Pioggia\s+(\d+(?:[.,]\d+)?)\s*mm/i
-    )),
-    rainRate: matchedNumber(text.match(
-      /Pioggia\s+\d+(?:[.,]\d+)?\s*mm\s*\(\s*(\d+(?:[.,]\d+)?)\s*mm\/h/i
-    )),
-    wind: matchedNumber(text.match(
-      /Vento\s+(\d+(?:[.,]\d+)?)\s*km\/h/i
-    )),
-    windDirection: text.match(
-      /Vento\s+\d+(?:[.,]\d+)?\s*km\/h\s*\(([^)]+)\)/i
-    )?.[1]?.trim() || null,
-    windGust: matchedNumber(text.match(
-      /Raffica\s+(\d+(?:[.,]\d+)?)\s*km\/h/i
-    )),
-    dewPoint: matchedNumber(text.match(
-      /Temp\.\s*di\s*rugiada\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
-    )),
-    stationCode: "TRN362"
+    humidity,
+    pressure,
+    precipitation: num(values?.rain),
+    rainToday: num(values?.rain),
+    rainRate: num(values?.rainrate),
+    wind: weatherCloudWindKmh(values?.wspdavg ?? values?.wspd),
+    windGust: weatherCloudWindKmh(values?.wspdhi),
+    windDirectionDegrees: num(values?.wdiravg ?? values?.wdir),
+    dewPoint: num(values?.dew),
+    windChill: num(values?.chill),
+    heatIndex: num(values?.heat),
+    weatherCloudId: SAN_PELLEGRINO_WEATHERCLOUD_ID,
+    ageSeconds
   };
 }
 
@@ -671,16 +650,16 @@ function parseSanPellegrinoStation(html) {
 function unavailableSanPellegrinoStation(error) {
   return {
     id: "sarcine",
-    name: "Sarcine - Passo San Pellegrino",
+    name: "Sarcine · Passo San Pellegrino",
     altitude: 1800,
-    latitude: 46.376913,
-    longitude: 11.751399,
-    source: "MeteoNetwork",
+    latitude: 46.3758124,
+    longitude: 11.7500821,
+    source: "WeatherCloud",
     sourceUrl: SAN_PELLEGRINO_STATION_URL,
     status: "error",
     updated: null,
     fetchedAt: new Date().toISOString(),
-    stationCode: "TRN362",
+    weatherCloudId: SAN_PELLEGRINO_WEATHERCLOUD_ID,
     error: String(error?.message || error || "Fonte non disponibile")
   };
 }
@@ -695,11 +674,13 @@ async function fetchSanPellegrinoStation() {
 
   try {
     const response = await fetch(
-      SAN_PELLEGRINO_STATION_URL,
+      SAN_PELLEGRINO_VALUES_URL,
       {
         headers: {
-          "Accept": "text/html,application/xhtml+xml",
-          "User-Agent": "Mozilla/5.0 (compatible; MeteoFassaWorker/1.3)"
+          "Accept": "application/json, text/plain, */*",
+          "Referer": SAN_PELLEGRINO_STATION_URL,
+          "X-Requested-With": "XMLHttpRequest",
+          "User-Agent": "Mozilla/5.0 (compatible; MeteoFassaWorker/1.4)"
         },
         signal: controller.signal,
         cf: {
@@ -710,11 +691,20 @@ async function fetchSanPellegrinoStation() {
     );
 
     if (!response.ok)
-      throw new Error(`MeteoNetwork HTTP ${response.status}`);
+      throw new Error(`WeatherCloud HTTP ${response.status}`);
 
-    return parseSanPellegrinoStation(
-      await response.text()
-    );
+    const text = await response.text();
+    if (!text)
+      throw new Error("WeatherCloud ha restituito una risposta vuota");
+
+    let values;
+    try {
+      values = JSON.parse(text);
+    } catch {
+      throw new Error("WeatherCloud ha restituito un JSON non valido");
+    }
+
+    return parseSanPellegrinoStation(values);
   } catch (error) {
     return unavailableSanPellegrinoStation(error);
   } finally {

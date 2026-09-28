@@ -4,6 +4,9 @@ import test from "node:test";
 import worker from "../gite-meteo-aggregator.js";
 
 
+const WEATHER_CLOUD_ID = "6354731265";
+
+
 function service(stations) {
   return {
     fetch: async () => Response.json({
@@ -31,29 +34,33 @@ function environment() {
 }
 
 
-test("Sarcine replaces Cima Paradiso in the Moena zone", async () => {
+test("WeatherCloud Sarcine replaces Cima Paradiso in the Moena zone", async () => {
   const originalFetch = globalThis.fetch;
+  const epoch = Math.floor(Date.now() / 1000) - 60;
 
-  globalThis.fetch = async url => {
-    assert.match(String(url), /trn362-/);
+  globalThis.fetch = async (url, options) => {
+    assert.equal(
+      String(url),
+      `https://app.weathercloud.net/device/values/${WEATHER_CLOUD_ID}`
+    );
+    assert.equal(options?.headers?.["X-Requested-With"], "XMLHttpRequest");
 
-    return new Response(`
-      <button type="button" class="btn btn-success">online</button>
-      <div>Temperatura<br>3.4 &deg;C</div>
-      <div>4.8 &deg;C</div>
-      <div>-1.2 &deg;C</div>
-      <div>Umidità<br>81 %</div>
-      <div>Pressione<br>1018.7 hPa</div>
-      <div>Pioggia<br>1.2 mm (0.3 mm/h)</div>
-      <div>Vento<br>7.4 km/h (WNW)</div>
-      <div>Raffica 18.2 km/h</div>
-      <div>Temp. di rugiada<br>0.4 &deg;C</div>
-      <script>
-        let maxTHour = 08 - hours;
-        let maxTMin = 27 - parseInt(minutes);
-        let text = 'Ultimo rilevamento alle ' + ' del ' + '2026-09-28';
-      </script>
-    `);
+    return Response.json({
+      epoch,
+      temp: 3.4,
+      chill: 2.1,
+      dew: 0.4,
+      heat: 3.4,
+      hum: 81,
+      wdir: 290,
+      wdiravg: 292.5,
+      wspd: 2.2,
+      wspdavg: 2.0555556,
+      wspdhi: 5.0555556,
+      bar: 1018.7,
+      rainrate: 0.3,
+      rain: 1.2
+    });
   };
 
   try {
@@ -64,6 +71,7 @@ test("Sarcine replaces Cima Paradiso in the Moena zone", async () => {
     const payload = await response.json();
     const keys = payload.zone.stations.map(station => station.key);
 
+    assert.equal(payload.schema_version, "1.4");
     assert.deepEqual(keys, [
       "fassa:sarcine",
       "fassa:rolle",
@@ -74,27 +82,38 @@ test("Sarcine replaces Cima Paradiso in the Moena zone", async () => {
     assert.ok(!keys.includes("fassa:paradiso"));
 
     const sarcine = payload.zone.stations[0];
-    assert.equal(sarcine.name, "Sarcine - Passo San Pellegrino");
+    assert.equal(sarcine.name, "Sarcine · Passo San Pellegrino");
+    assert.equal(sarcine.source, "WeatherCloud");
+    assert.equal(
+      sarcine.sourceUrl,
+      `https://app.weathercloud.net/d${WEATHER_CLOUD_ID}`
+    );
     assert.equal(sarcine.status, "online");
     assert.equal(sarcine.temperature, 3.4);
-    assert.equal(sarcine.temperatureMin, -1.2);
+    assert.equal(sarcine.humidity, 81);
+    assert.equal(sarcine.wind, 7.4);
+    assert.equal(sarcine.windGust, 18.2);
     assert.equal(sarcine.windDirection, "WNW");
-    assert.equal(sarcine.updated, "2026-09-28T08:27:00Z");
-    assert.equal(sarcine.latitude, 46.376913);
-    assert.equal(sarcine.longitude, 11.751399);
+    assert.equal(sarcine.precipitation, 1.2);
+    assert.equal(sarcine.rainToday, 1.2);
+    assert.equal(sarcine.updated, new Date(epoch * 1000).toISOString());
+    assert.equal(sarcine.latitude, 46.3758124);
+    assert.equal(sarcine.longitude, 11.7500821);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
 
-test("Sarcine remains identified without inventing data while offline", async () => {
+test("WeatherCloud observations older than 30 minutes are marked stale", async () => {
   const originalFetch = globalThis.fetch;
 
-  globalThis.fetch = async () => new Response(`
-    <button type="button" class="btn btn-danger">offline</button>
-    <!-- no current observations -->
-  `);
+  globalThis.fetch = async () => Response.json({
+    epoch: Math.floor(Date.now() / 1000) - (31 * 60),
+    temp: 4.2,
+    hum: 76,
+    bar: 1015.3
+  });
 
   try {
     const response = await worker.fetch(
@@ -105,7 +124,31 @@ test("Sarcine remains identified without inventing data while offline", async ()
     const sarcine = payload.zone.stations[0];
 
     assert.equal(sarcine.key, "fassa:sarcine");
-    assert.equal(sarcine.status, "offline");
+    assert.equal(sarcine.status, "stale");
+    assert.equal(sarcine.temperature, 4.2);
+    assert.ok(sarcine.updated);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("Sarcine remains identified when WeatherCloud is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => new Response("", { status: 200 });
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://worker.test/zone/moena_latemar"),
+      environment()
+    );
+    const payload = await response.json();
+    const sarcine = payload.zone.stations[0];
+
+    assert.equal(sarcine.key, "fassa:sarcine");
+    assert.equal(sarcine.source, "WeatherCloud");
+    assert.equal(sarcine.status, "error");
     assert.equal(sarcine.temperature, null);
     assert.equal(sarcine.updated, null);
   } finally {
