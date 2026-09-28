@@ -51,16 +51,22 @@ function localPayload() {
       aggiornamento: updated,
       stato: "ok"
     },
-    vigo: {
-      stazione: "Vigo di Fassa",
-      temperatura: { attuale: 12.5, min: 6.8, max: 17.1 },
-      umidita: { attuale: 75 },
-      dew_point: { attuale: 8.2 },
-      wind_chill: { attuale: 12.2 },
-      heat_index: { attuale: 12.4 },
-      pressione: { attuale: 1022.1 },
-      vento: { attuale: 3.2, raffica: 12.9, direzione: "NNW" },
-      precipitazioni: { intensita: 0, giornaliero: 0 },
+    pezze: {
+      stazione: "Frazione Pezzè - Moena",
+      temperatura: 12.5,
+      temperatura_min: 6.8,
+      temperatura_max: 17.1,
+      umidita: 75,
+      dew_point: 8.2,
+      heat_index: 12.4,
+      pressione: 1022.1,
+      vento: 3.2,
+      raffica: 12.9,
+      direzione: "NNW",
+      pioggia_rate: 0,
+      pioggia: 0,
+      radiazione_solare: 350,
+      uv: 2.1,
       aggiornamento: updated,
       stato: "ok"
     }
@@ -82,7 +88,7 @@ async function get(path = "/", env = {}) {
 }
 
 test("contratto delle stazioni principali di Moena", async t => {
-  await t.test("normalizza T0096, Moena Meteo e Vigo", async () => {
+  await t.test("normalizza T0096, Strada de Even e Frazione Pezzè", async () => {
     const env = {
       TRENTINO: binding(trentinoPayload()),
       POZZA: binding(localPayload())
@@ -91,13 +97,13 @@ test("contratto delle stazioni principali di Moena", async t => {
 
     assert.equal(response.status, 200);
     assert.equal(body.ok, true);
-    assert.equal(body.schemaVersion, "1.0");
+    assert.equal(body.schemaVersion, "1.1");
     assert.equal(body.count, 3);
     assert.equal(body.online, 3);
     assert.deepEqual(body.stations.map(station => station.id), [
       "moena-diga-pezze",
       "moena-meteo",
-      "vigo-di-fassa"
+      "moena-pezze-meteonetwork"
     ]);
 
     const official = body.stations[0];
@@ -113,10 +119,13 @@ test("contratto delle stazioni principali di Moena", async t => {
     assert.equal(moena.temperatureMax, null);
     assert.match(moena.warnings.join(" "), /non plausibili/i);
 
-    const vigo = body.stations[2];
-    assert.equal(vigo.altitude, 1382);
-    assert.equal(vigo.temperatureMin, 6.8);
-    assert.equal(vigo.windDirectionText, "NNW");
+    const pezze = body.stations[2];
+    assert.equal(pezze.name, "Frazione Pezzè");
+    assert.equal(pezze.altitude, 1212);
+    assert.equal(pezze.temperatureMin, 6.8);
+    assert.equal(pezze.windDirectionText, "NNW");
+    assert.equal(pezze.solarRadiation, 350);
+    assert.equal(pezze.uvIndex, 2.1);
   });
 
   await t.test("un guasto MeteoTrentino non blocca le stazioni locali", async () => {

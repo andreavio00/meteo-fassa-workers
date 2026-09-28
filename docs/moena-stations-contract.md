@@ -1,10 +1,10 @@
 # Contratto JSON delle stazioni di Moena
 
-Versione del contratto: **1.0**
+Versione del contratto: **1.1**
 
 Il contratto e' condiviso da:
 
-- `meteomoena-stazioni`, per Diga di Pezzè, Moena Meteo e Vigo di Fassa;
+- `meteomoena-stazioni`, per Diga di Pezzè, Strada de Even e Frazione Pezzè;
 - `meteomoena-amatoriali`, per Weather Underground e Netatmo.
 
 Gli endpoint pubblici sono:
@@ -18,7 +18,7 @@ Gli endpoint pubblici sono:
 ```json
 {
   "ok": true,
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "service": "meteomoena-stazioni",
   "generatedAt": "2026-09-27T19:30:00.000Z",
   "fetchedAt": "2026-09-27T19:30:00.000Z",
@@ -138,8 +138,8 @@ Unix, mantenuto per semplificare il calcolo dell'eta' nel browser.
 `meteomoena-stazioni` restituisce:
 
 1. Diga di Pezzè (`moena-diga-pezze`);
-2. Moena Meteo (`moena-meteo`);
-3. Vigo di Fassa (`vigo-di-fassa`).
+2. Strada de Even / Moena Meteo (`moena-meteo`);
+3. Frazione Pezzè / MeteoNetwork TRN352 (`moena-pezze-meteonetwork`).
 
 `meteomoena-amatoriali` restituisce tutte e sei le candidate, nell'ordine
 iniziale suggerito per l'interfaccia:

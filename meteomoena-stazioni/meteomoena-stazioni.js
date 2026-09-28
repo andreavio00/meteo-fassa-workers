@@ -3,7 +3,7 @@
  *
  * Fonti server-side, raggiunte tramite Service Bindings:
  *   TRENTINO -> gite-meteotrentino (T0096, Diga di Pezze)
- *   POZZA    -> meteopozza-stazioni (Moena Meteo e Vigo di Fassa)
+ *   POZZA    -> meteopozza-stazioni (Strada de Even e MeteoNetwork Pezzè)
  *
  * Endpoint:
  *   GET /          snapshot normalizzato
@@ -12,7 +12,7 @@
  */
 
 const SERVICE_NAME = "meteomoena-stazioni";
-const SCHEMA_VERSION = "1.0";
+const SCHEMA_VERSION = "1.1";
 
 const UPSTREAM_TIMEOUT_MS = 8_000;
 const FRESH_CACHE_SECONDS = 2 * 60;
@@ -23,8 +23,8 @@ const STALE_AFTER_MINUTES = 30;
 const METEOTRENTINO_SOURCE_URL =
   "https://www.meteotrentino.it/dati/meteo/ultimi-dati-meteo/";
 const MOENA_METEO_SOURCE_URL = "https://www.moenameteo.it/";
-const VIGO_SOURCE_URL =
-  "https://stazioni.meteoproject.it/dati/vigodifassa/dati.php";
+const PEZZE_SOURCE_URL =
+  "https://www.meteonetwork.eu/it/weather-station/trn352-stazione-meteorologica-di-frazione-pezze";
 
 const UNITS = {
   temperature: "°C",
@@ -49,24 +49,24 @@ const STATION_DEFINITIONS = [
   {
     id: "moena-meteo",
     upstreamId: "moena",
-    name: "Moena Meteo",
-    fullName: "Moena Meteo - Helium2",
+    name: "Strada de Even",
+    fullName: "Moena - Strada de Even",
     category: "reference",
     source: "Moena Meteo",
-    sourceName: "Moena Meteo - Helium2",
+    sourceName: "Moena Meteo",
     sourceUrl: MOENA_METEO_SOURCE_URL,
-    notice: "Stazione locale di riferimento"
+    notice: "Stazione Helium2"
   },
   {
-    id: "vigo-di-fassa",
-    upstreamId: "vigodifassa",
-    name: "Vigo di Fassa",
-    fullName: "Vigo di Fassa",
+    id: "moena-pezze-meteonetwork",
+    upstreamId: "TRN352",
+    name: "Frazione Pezzè",
+    fullName: "Moena - Frazione Pezzè",
     category: "reference",
-    source: "MeteoProject",
-    sourceName: "MeteoProject - Vigo di Fassa",
-    sourceUrl: VIGO_SOURCE_URL,
-    notice: "Stazione locale di riferimento"
+    source: "MeteoNetwork",
+    sourceName: "MeteoNetwork TRN352",
+    sourceUrl: PEZZE_SOURCE_URL,
+    notice: "Stazione a norma MeteoNetwork"
   }
 ];
 
@@ -272,7 +272,7 @@ function normalizeMoenaMeteo(raw) {
   if (!raw) throw new Error("Moena Meteo non disponibile");
 
   const warnings = [
-    "Coordinate indicative del centro di Moena: la sorgente non pubblica la posizione esatta."
+    "Posizione indicativa lungo Strada de Even: la sorgente non pubblica le coordinate esatte."
   ];
   const rawMinimum = numeric(raw.temperatura_min);
   const rawMaximum = numeric(raw.temperatura_max);
@@ -290,8 +290,8 @@ function normalizeMoenaMeteo(raw) {
   const windGust = bounded(raw.vento_max_giorno, 0, 350);
 
   return finalizeStation(definition, {
-    latitude: 46.3759,
-    longitude: 11.6586,
+    latitude: 46.3803,
+    longitude: 11.6568,
     altitude: bounded(raw.quota, 0, 5000),
     coordinatesApproximate: true,
     temperature,
@@ -327,38 +327,38 @@ function normalizeMoenaMeteo(raw) {
   });
 }
 
-function normalizeVigo(raw) {
+function normalizePezze(raw) {
   const definition = STATION_DEFINITIONS[2];
-  if (!raw) throw new Error("Vigo di Fassa non disponibile");
+  if (!raw) throw new Error("Frazione Pezzè non disponibile");
 
-  const temperature = bounded(raw.temperatura?.attuale, -60, 60);
-  const humidity = bounded(raw.umidita?.attuale, 0, 100);
-  const pressure = bounded(raw.pressione?.attuale, 700, 1150);
-  const wind = bounded(raw.vento?.attuale, 0, 300);
-  const windGust = bounded(raw.vento?.raffica, 0, 350);
+  const temperature = bounded(raw.temperatura, -60, 60);
+  const humidity = bounded(raw.umidita, 0, 100);
+  const pressure = bounded(raw.pressione, 700, 1150);
+  const wind = bounded(raw.vento, 0, 300);
+  const windGust = bounded(raw.raffica, 0, 350);
 
   return finalizeStation(definition, {
-    latitude: 46.42,
-    longitude: 11.68,
-    altitude: 1382,
+    latitude: 46.38,
+    longitude: 11.665,
+    altitude: 1212,
     coordinatesApproximate: true,
     temperature,
-    temperatureMin: bounded(raw.temperatura?.min, -60, 60),
-    temperatureMax: bounded(raw.temperatura?.max, -60, 60),
+    temperatureMin: bounded(raw.temperatura_min, -60, 60),
+    temperatureMax: bounded(raw.temperatura_max, -60, 60),
     humidity,
-    dewPoint: bounded(raw.dew_point?.attuale, -80, 60) ?? calculateDewPoint(temperature, humidity),
-    windChill: bounded(raw.wind_chill?.attuale, -80, 60),
-    heatIndex: bounded(raw.heat_index?.attuale, -60, 80),
+    dewPoint: bounded(raw.dew_point, -80, 60) ?? calculateDewPoint(temperature, humidity),
+    windChill: null,
+    heatIndex: bounded(raw.heat_index, -60, 80),
     pressure,
     wind,
     windGust,
     windDirection: null,
-    windDirectionText: raw.vento?.direzione || null,
-    rainRate: bounded(raw.precipitazioni?.intensita, 0, 1000),
+    windDirectionText: raw.direzione || null,
+    rainRate: bounded(raw.pioggia_rate, 0, 1000),
     rainHour: null,
-    rainToday: bounded(raw.precipitazioni?.giornaliero, 0, 2000),
-    solarRadiation: null,
-    uvIndex: null,
+    rainToday: bounded(raw.pioggia, 0, 2000),
+    solarRadiation: bounded(raw.radiazione_solare, 0, 2000),
+    uvIndex: bounded(raw.uv, 0, 30),
     updatedAt: raw.aggiornamento,
     upstreamState: raw.stato === "stale" ? "stale" : "ok",
     error: raw.erroreRete || null,
@@ -366,13 +366,12 @@ function normalizeVigo(raw) {
       temperature: temperature !== null,
       humidity: humidity !== null,
       pressure: pressure !== null,
-      rain: raw.precipitazioni?.giornaliero !== null &&
-        raw.precipitazioni?.giornaliero !== undefined,
-      wind: raw.vento?.attuale !== null && raw.vento?.attuale !== undefined,
-      solar: false,
-      uv: false
+      rain: raw.pioggia !== null && raw.pioggia !== undefined,
+      wind: raw.vento !== null && raw.vento !== undefined,
+      solar: raw.radiazione_solare !== null && raw.radiazione_solare !== undefined,
+      uv: raw.uv !== null && raw.uv !== undefined
     },
-    warnings: ["Coordinate arrotondate dalla fonte (46.42 N, 11.68 E)."]
+    warnings: ["Coordinate pubblicate dalla fonte con precisione limitata (46.38 N, 11.665 E)."]
   });
 }
 
@@ -459,7 +458,7 @@ async function refreshSnapshot(env, previous = null) {
         ? staleStation(previousById.get(STATION_DEFINITIONS[1].id), localResult.reason)
         : offlineStation(STATION_DEFINITIONS[1], localResult.reason)),
     localResult.status === "fulfilled"
-      ? resolvedStation(STATION_DEFINITIONS[2], normalizeVigo, localSource?.vigo, previousById)
+      ? resolvedStation(STATION_DEFINITIONS[2], normalizePezze, localSource?.pezze, previousById)
       : (previousById.has(STATION_DEFINITIONS[2].id)
         ? staleStation(previousById.get(STATION_DEFINITIONS[2].id), localResult.reason)
         : offlineStation(STATION_DEFINITIONS[2], localResult.reason))
@@ -512,7 +511,7 @@ async function getSnapshot(request, env, context) {
   const cache = globalThis.caches?.default || null;
   const requestUrl = new URL(request.url);
   const cacheKey = new Request(
-    `${requestUrl.origin}/__cache/meteomoena-stazioni-v1`,
+    `${requestUrl.origin}/__cache/meteomoena-stazioni-v2`,
     { method: "GET" }
   );
   let cached = null;

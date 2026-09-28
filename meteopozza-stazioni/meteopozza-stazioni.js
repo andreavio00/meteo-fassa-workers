@@ -9,6 +9,9 @@ export default {
     const MONZON_URL =
       "https://www.meteonetwork.eu/it/weather-station/trn314-stazione-meteorologica-di-monzon";
 
+    const PEZZE_URL =
+      "https://www.meteonetwork.eu/it/weather-station/trn352-stazione-meteorologica-di-frazione-pezze";
+
     const MOENA_URL =
       "https://www.moenameteo.it/joomla/wview/Current.htm";
 
@@ -36,10 +39,10 @@ export default {
     /*
      * FIX AFFIDABILITA' (settembre 2026)
      * ----------------------------------
-     * Prima le tre fonti venivano recuperate con un solo Promise.all "secco":
+     * Prima le fonti venivano recuperate con un solo Promise.all "secco":
      * se anche una sola (tipicamente Moena, la piu' lenta) restava bloccata
      * o ci metteva troppo, l'intera richiesta scadeva oltre il timeout lato
-     * frontend (7s) e sparivano anche i dati delle altre due stazioni, gia'
+     * frontend (7s) e sparivano anche i dati delle altre stazioni, gia'
      * pronti da tempo. Ora ogni fonte ha un timeout individuale via
      * AbortController: una fonte lenta non blocca piu' le altre.
      */
@@ -103,9 +106,10 @@ export default {
       }
     }
 
-    const [vigoRes, monzonRes, moenaRes] = await Promise.all([
+    const [vigoRes, monzonRes, pezzeRes, moenaRes] = await Promise.all([
       fetchSource(VIGO_URL),
       fetchSource(MONZON_URL),
+      fetchSource(PEZZE_URL),
       fetchSource(MOENA_URL)
     ]);
 
@@ -115,7 +119,7 @@ export default {
      * sarebbe fallita con un 500).
      */
     const raw = url.searchParams.get("raw");
-    const rawMap = { vigo: vigoRes, monzon: monzonRes, moena: moenaRes };
+    const rawMap = { vigo: vigoRes, monzon: monzonRes, pezze: pezzeRes, moena: moenaRes };
     if (raw && rawMap[raw]) {
       const r = rawMap[raw];
       return new Response(r.ok ? r.html : `Errore: ${r.errore}`, {
@@ -153,9 +157,10 @@ export default {
       return null;
     }
 
-    const [vigo, monzon, moena] = await Promise.all([
+    const [vigo, monzon, pezze, moena] = await Promise.all([
       buildStation("vigo", vigoRes, parseVigo),
       buildStation("monzon", monzonRes, parseMonzon),
+      buildStation("pezze", pezzeRes, parsePezze),
       buildStation("moena", moenaRes, parseMoena)
     ]);
 
@@ -164,6 +169,7 @@ export default {
       timestamp: new Date().toISOString(),
       vigo,
       monzon,
+      pezze,
       moena
     };
 
@@ -698,6 +704,8 @@ function parseMonzon(html) {
       "Monzon - Pozza di Fassa",
 
     temperatura: null,
+    temperatura_min: null,
+    temperatura_max: null,
     umidita: null,
     pressione: null,
     pioggia: null,
@@ -748,12 +756,24 @@ function parseMonzon(html) {
 
   let match;
 
+  // Nella pagina MeteoNetwork i tre valori che seguono il titolo sono,
+  // nell'ordine, temperatura attuale, massima e minima giornaliera.
+  match = text.match(
+    /Temperatura\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
+  );
+
+  if (match) {
+    result.temperatura = numberValue(match[1]);
+    result.temperatura_max = numberValue(match[2]);
+    result.temperatura_min = numberValue(match[3]);
+  }
+
   match =
     text.match(
       /Temperatura\s+(-?\d+(?:[.,]\d+)?)\s*°C/i
     );
 
-  if (match)
+  if (match && result.temperatura === null)
     result.temperatura =
       numberValue(match[1]);
 
@@ -878,6 +898,14 @@ function parseMonzon(html) {
 
   return result;
 
+}
+
+// TRN352 usa la stessa pagina e lo stesso formato di Monzon (TRN314).
+// Manteniamo quindi un solo parser e cambiamo soltanto l'identità esposta.
+function parsePezze(html) {
+  const result = parseMonzon(html);
+  result.stazione = "Frazione Pezzè - Moena";
+  return result;
 }
 
 /* ======================================================
