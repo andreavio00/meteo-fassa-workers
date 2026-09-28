@@ -28,6 +28,8 @@ https://moenalive.andrea-vio.workers.dev/
 ## Percorsi speciali
 
 - `/` e `/index.html` espongono `moena.html`;
+- nella copia di `moena.html` il Worker riattiva il manifest dedicato, che
+  resta invece disabilitato sulla pagina GitHub inclusa nell'ambito PozzaLive;
 - `/manifest.webmanifest` espone `moena.webmanifest`;
 - le icone generiche vengono sostituite con quelle verdi di MoenaLive;
 - gli altri file vengono letti dallo stesso sito GitHub Pages.

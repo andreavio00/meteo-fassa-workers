@@ -81,6 +81,35 @@ function browserCacheControl(pathname) {
   return "public, max-age=300";
 }
 
+async function proxiedResponse(upstreamResponse, mappedPath, method) {
+  if (
+    method === "GET" &&
+    mappedPath === "/moena.html" &&
+    upstreamResponse.ok
+  ) {
+    const html = await upstreamResponse.text();
+    const rewrittenHtml = html.replace(
+      '<link data-moena-manifest href="./moena.webmanifest">',
+      '<link rel="manifest" href="./moena.webmanifest">'
+    );
+    const headers = new Headers(upstreamResponse.headers);
+
+    // Il corpo è stato decodificato e modificato: Cloudflare deve calcolare
+    // nuovamente lunghezza, compressione ed ETag.
+    headers.delete("Content-Encoding");
+    headers.delete("Content-Length");
+    headers.delete("ETag");
+
+    return new Response(rewrittenHtml, {
+      status: upstreamResponse.status,
+      statusText: upstreamResponse.statusText,
+      headers
+    });
+  }
+
+  return new Response(upstreamResponse.body, upstreamResponse);
+}
+
 export default {
   async fetch(request) {
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -117,7 +146,11 @@ export default {
       return textResponse("MoenaLive è temporaneamente non disponibile", 502);
     }
 
-    const response = new Response(upstreamResponse.body, upstreamResponse);
+    const response = await proxiedResponse(
+      upstreamResponse,
+      resolved.mappedPath,
+      request.method
+    );
     response.headers.set("Cache-Control", browserCacheControl(resolved.mappedPath));
     response.headers.set("X-Content-Type-Options", "nosniff");
     response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

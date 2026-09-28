@@ -6,7 +6,10 @@ const requests = [];
 
 globalThis.fetch = async (url, init) => {
   requests.push({ url: String(url), init });
-  return new Response(`origine:${url}`, {
+  const body = String(url).endsWith("/moena.html")
+    ? '<head><link data-moena-manifest href="./moena.webmanifest"></head>'
+    : `origine:${url}`;
+  return new Response(body, {
     status: 200,
     headers: { "Content-Type": "text/plain; charset=utf-8" }
   });
@@ -20,6 +23,11 @@ try {
     "https://andreavio00.github.io/meteo-fassa/moena.html"
   );
   assert.equal(root.headers.get("X-MoenaLive-Proxy"), "github-pages");
+  assert.match(await root.text(), /rel="manifest"/);
+  assert.doesNotMatch(await (async()=>{
+    const response=await worker.fetch(new Request("https://moenalive.example/"));
+    return response.text();
+  })(), /data-moena-manifest/);
 
   await worker.fetch(new Request("https://moenalive.example/index.html?test=1"));
   assert.equal(
