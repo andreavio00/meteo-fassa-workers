@@ -6,7 +6,7 @@ PozzaLive. Il frontend continua a essere mantenuto in
 GitHub Pages e presenta `moena.html` come pagina iniziale.
 
 Questa separazione evita che Chrome consideri Moena una pagina interna della
-PWA PozzaLive già predisposta e installata. Non vengono interrogate nuove fonti meteo e non
+PWA PozzaLive già installata. Non vengono interrogate nuove fonti meteo e non
 sono necessari binding, variabili o secret.
 
 ## Indirizzo previsto
