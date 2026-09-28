@@ -43,6 +43,11 @@ dell'aggregatore delle previsioni:
 * `marmolada_val_s_nicolo`
 * `moena_latemar`
 
+La zona `moena_latemar` riunisce le osservazioni di Cima Paradiso/Passo San
+Pellegrino, Passo Rolle e Latemar. L'aggregatore delle previsioni include anche
+Passo San Pellegrino e il punto ICON-D2 di Fuciade (46.3930724, 11.8277404),
+oltre ai punti già presenti di Costalunga, Rolle e Passo Feudo.
+
 Endpoint principali:
 
 * `/` dataset completo, comprensivo di zone

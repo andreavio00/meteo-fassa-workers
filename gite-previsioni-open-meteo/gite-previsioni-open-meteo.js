@@ -3,8 +3,9 @@ const LOCATIONS = [
       { id: "passo_san_nicolo", name: "Passo San Nicolò", latitude: 46.42173, longitude: 11.79331 },
         { id: "rifugio_contrin", name: "Rifugio Contrin", latitude: 46.42972, longitude: 11.81616 },
           { id: "penia", name: "Penia", latitude: 46.45804, longitude: 11.79882 },
-            { id: "passo_fedaia", name: "Passo Fedaia", latitude: 46.45350, longitude: 11.88900 },
+              { id: "passo_fedaia", name: "Passo Fedaia", latitude: 46.45350, longitude: 11.88900 },
               { id: "rifugio_vajolet", name: "Rifugio Vajolet", latitude: 46.45799, longitude: 11.63275 },
+                { id: "fuciade", name: "Fuciade", latitude: 46.3930724, longitude: 11.8277404 },
                 { id: "passo_feudo", name: "Passo Feudo", latitude: 46.34471, longitude: 11.55894 },
                   { id: "rifugio_sasso_piatto", name: "Rifugio Sasso Piatto", latitude: 46.50440, longitude: 11.70087 },
                     { id: "val_duron_baita_lino_brach", name: "Val Duron - Baita Lino Brach", latitude: 46.49271, longitude: 11.695762 }

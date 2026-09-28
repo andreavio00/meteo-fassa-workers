@@ -72,7 +72,8 @@ const LOCATION_ZONES = {
   ],
 
   "passo_san_pellegrino": [
-    "marmolada_val_s_nicolo"
+    "marmolada_val_s_nicolo",
+    "moena_latemar"
   ],
 
   "passo_rolle": [
@@ -101,6 +102,10 @@ const LOCATION_ZONES = {
 
   "rifugio_vajolet": [
     "catinaccio"
+  ],
+
+  "fuciade": [
+    "moena_latemar"
   ],
 
   "passo_feudo": [

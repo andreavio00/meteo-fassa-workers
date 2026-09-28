@@ -106,8 +106,8 @@ const ZONES = [
     id: "moena_latemar",
     name: "Moena e Latemar",
     stationKeys: [
-      "fassa:rolle",
       "fassa:paradiso",
+      "fassa:rolle",
       "predazzo:torredipisa",
       "predazzo:passofeudo",
       "predazzo:gardone"
